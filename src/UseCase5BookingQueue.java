@@ -1,55 +1,109 @@
-import java.util.LinkedList;
-import java.util.Queue;
+import java.io.*;
+import java.util.*;
 
-// Reservation class (represents a booking request)
-class Reservation {
+// Serializable Reservation
+class PersistedReservation implements Serializable {
+    String reservationId;
     String guestName;
     String roomType;
 
-    public Reservation(String guestName, String roomType) {
+    public PersistedReservation(String reservationId, String guestName, String roomType) {
+        this.reservationId = reservationId;
         this.guestName = guestName;
         this.roomType = roomType;
     }
 
     public String toString() {
-        return "Guest: " + guestName + ", Room Type: " + roomType;
+        return reservationId + " | " + guestName + " | " + roomType;
     }
 }
 
-// Booking Queue Manager
-class BookingQueue {
-    private Queue<Reservation> queue;
+// Wrapper for full system state
+class SystemState implements Serializable {
+    Map<String, Integer> inventory;
+    List<PersistedReservation> bookings;
 
-    public BookingQueue() {
-        queue = new LinkedList<>();
+    public SystemState(Map<String, Integer> inventory,
+                       List<PersistedReservation> bookings) {
+        this.inventory = inventory;
+        this.bookings = bookings;
     }
+}
 
-    // Add booking request
-    public void addRequest(Reservation reservation) {
-        queue.add(reservation);
-        System.out.println("Request added: " + reservation);
-    }
+// Persistence Service
+class PersistenceService {
 
-    // View all requests
-    public void showQueue() {
-        System.out.println("\nCurrent Booking Queue:");
-        for (Reservation r : queue) {
-            System.out.println(r);
+    private static final String FILE_NAME = "system_state.dat";
+
+    // SAVE
+    public static void save(SystemState state) {
+        try (ObjectOutputStream out =
+                     new ObjectOutputStream(new FileOutputStream(FILE_NAME))) {
+
+            out.writeObject(state);
+            System.out.println("System state saved successfully.");
+
+        } catch (IOException e) {
+            System.out.println("Error saving state: " + e.getMessage());
         }
     }
+
+    // LOAD
+    public static SystemState load() {
+        try (ObjectInputStream in =
+                     new ObjectInputStream(new FileInputStream(FILE_NAME))) {
+
+            System.out.println("System state loaded successfully.");
+            return (SystemState) in.readObject();
+
+        } catch (FileNotFoundException e) {
+            System.out.println("No previous state found. Starting fresh.");
+        } catch (Exception e) {
+            System.out.println("Error loading state. Starting safe default.");
+        }
+
+        return new SystemState(new HashMap<>(), new ArrayList<>());
+    }
 }
 
-public class UseCase5BookingQueue {
+// Main Class
+public class UseCase12Persistence {
     public static void main(String[] args) {
 
-        BookingQueue bookingQueue = new BookingQueue();
+        // STEP 1: Load existing state (simulate restart)
+        SystemState state = PersistenceService.load();
 
-        // Simulating booking requests
-        bookingQueue.addRequest(new Reservation("Adi", "Deluxe"));
-        bookingQueue.addRequest(new Reservation("Rahul", "Suite"));
-        bookingQueue.addRequest(new Reservation("Priya", "Standard"));
+        Map<String, Integer> inventory = state.inventory;
+        List<PersistedReservation> bookings = state.bookings;
 
-        // Display queue
-        bookingQueue.showQueue();
+        // If first run → initialize
+        if (inventory.isEmpty()) {
+            inventory.put("Deluxe", 2);
+            inventory.put("Suite", 1);
+        }
+
+        // STEP 2: Simulate new booking
+        PersistedReservation newBooking =
+                new PersistedReservation("R" + (bookings.size() + 1),
+                        "Adi",
+                        "Deluxe");
+
+        bookings.add(newBooking);
+
+        // Update inventory safely
+        inventory.put("Deluxe", inventory.get("Deluxe") - 1);
+
+        System.out.println("New Booking Added: " + newBooking);
+
+        // STEP 3: Save state before shutdown
+        PersistenceService.save(new SystemState(inventory, bookings));
+
+        // STEP 4: Show current state
+        System.out.println("\nCurrent Inventory: " + inventory);
+
+        System.out.println("\nBooking History:");
+        for (PersistedReservation b : bookings) {
+            System.out.println(b);
+        }
     }
 }
